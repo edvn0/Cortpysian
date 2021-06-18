@@ -2,12 +2,10 @@ import time
 from collections import namedtuple
 
 import numpy as np
-from matplotlib import pyplot as plt
-from sklearn.model_selection import train_test_split
 
 from src.gradient_descent import SGD, Adam, Momentum
 from src.graph import Graph
-from src.operation import MatMul, Add, Sigmoid, Negative, ReduceSum, Multiply, Log, Tanh, Relu, Softmax
+from src.operation import MatMul, Add, Sigmoid, Negative, ReduceSum, Multiply, Log, Tanh, Relu, Softmax, LeakyRelu
 from src.placeholder import Placeholder
 from src.session import Session
 from src.variable import Variable
@@ -21,6 +19,7 @@ activation_registry = {
     'sigmoid': lambda w, a_p, b: Sigmoid(Add(MatMul(a_p, w), b)),
     'tanh': lambda w, a_p, b: Tanh(Add(MatMul(a_p, w), b)),
     'relu': lambda w, a_p, b: Relu(Add(MatMul(a_p, w), b)),
+    'leaky_relu': lambda w, a_p, b, alpha=0.01: LeakyRelu(Add(MatMul(a_p, w), b), alpha=alpha),
     'softmax': lambda w, a_p, b: Softmax(Add(MatMul(a_p, w), b))
 }
 
@@ -93,7 +92,8 @@ class Sequential:
             b_layer = Variable(
                 name=f"b_{its}_{glorot_b.shape}", initial_value=glorot_b, layer=its)
 
-            layer_sigmoid = activation_registry[self.layers[its].activation](W_layer, input_sigmoid, b_layer)
+            layer_sigmoid = activation_registry[self.layers[its].activation](
+                W_layer, input_sigmoid, b_layer)
 
             input_sigmoid = layer_sigmoid
             its += 1
@@ -120,7 +120,8 @@ class Sequential:
 
         batches = xs.shape[0] // batch_size
 
-        indices = np.arange(start=0, stop=xs.shape[0], step=batch_size, dtype=int)
+        indices = np.arange(
+            start=0, stop=xs.shape[0], step=batch_size, dtype=int)
 
         for i in range(epochs):
             t0 = time.time()
@@ -128,7 +129,8 @@ class Sequential:
             t1 = time.time()
 
             stats['time_epoch'].append(t1 - t0)
-            loss = s.run(self.J, feed_dict={self.X: xs, self.c: ys}) / xs.shape[0]
+            loss = s.run(self.J, feed_dict={
+                         self.X: xs, self.c: ys}) / xs.shape[0]
             if i % info_split == 0 and i != 0:
                 print(f"Epoch: {i}: Loss: {loss}")
             stats['loss_epoch'].append(loss)
@@ -143,6 +145,15 @@ class Sequential:
         s = Session()
         out = s.run(operation=self.Z, feed_dict=feed_dict)
         return np.argmax(out, axis=1)
+
+    def accuracy(self, Xs, labels):
+        feed_dict = {
+            self.X: Xs,
+        }
+
+        s = Session()
+        out = s.run(self.Z, feed_dict=feed_dict)
+        return np.array(np.argmax(out) == labels, dtype=int).sum()
 
     def predict(self, xs):
         feed_dict = {

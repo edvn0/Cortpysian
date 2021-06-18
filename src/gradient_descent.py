@@ -71,9 +71,11 @@ class SGD:
 
             def compute(self, **kwargs):
                 gradient_table = compute_gradients(loss)
-                applicable_nodes = [grad for grad in gradient_table if type(grad) == Variable]
+                applicable_nodes = [
+                    grad for grad in gradient_table if type(grad) == Variable]
                 grads = [gradient_table[grad] for grad in applicable_nodes]
-                self._split_computation_array(gradients=grads, nodes=applicable_nodes)
+                self._split_computation_array(
+                    gradients=grads, nodes=applicable_nodes)
 
         return MinimizationOperation()
 
@@ -95,12 +97,14 @@ class Momentum:
 
             def compute(self, **kwargs):
                 gradient_table = compute_gradients(loss)
-                grads = [grad for grad in gradient_table if type(grad) == Variable]
+                grads = [grad for grad in gradient_table if type(
+                    grad) == Variable]
                 for node in grads:
                     grad = gradient_table[node]
 
                     try:
-                        self.velocity[node] = self.momentum * self.velocity[node] - self.lr * grad
+                        self.velocity[node] = self.momentum * \
+                            self.velocity[node] - self.lr * grad
                     except KeyError:
                         self.velocity[node] = -self.lr * grad
 
@@ -134,13 +138,16 @@ class Adam:
 
             def compute(self, **kwargs):
                 gradient_table = compute_gradients(loss)
-                grads = [grad for grad in gradient_table if type(grad) == Variable]
+                grads = [grad for grad in gradient_table if type(
+                    grad) == Variable]
                 for node in grads:
                     grad = gradient_table[node]
 
                     try:
-                        w_m[node] = w_m[node] * self.beta_one + grad * (1 - self.beta_one)
-                        w_n[node] = w_n[node] * self.beta_two + np.square(grad) * (1 - self.beta_two)
+                        w_m[node] = w_m[node] * self.beta_one + \
+                            grad * (1 - self.beta_one)
+                        w_n[node] = w_n[node] * self.beta_two + \
+                            np.square(grad) * (1 - self.beta_two)
                     except KeyError:
                         w_m[node] = grad * (1 - self.beta_one)
                         w_n[node] = np.square(grad) * (1 - self.beta_two)

@@ -1,40 +1,36 @@
-import pandas as pandas
 from matplotlib import pyplot as plt
-from sklearn.preprocessing import MinMaxScaler
-
 from src.network import Sequential, Layer
 import numpy as np
 
 from sklearn.datasets import fetch_openml
 
-import pandas as pd
-
 if __name__ == "__main__":
-    mnist = fetch_openml('CIFAR_10', as_frame=False)
+    mnist = fetch_openml('mammography', as_frame=False)
 
     y = np.array(mnist.target, dtype=np.int8)
     b = np.zeros((y.size, np.max(y, axis=0) + 1))
     b[np.arange(y.size), y] = 1
-    x = mnist.data.reshape(-1, 3072)
-    x /= 255.0
+    x = mnist.data.reshape(-1, 6)
 
     # Create a new graph
     net = Sequential([
-        Layer(input_nodes=3072, activation='relu'),
-        Layer(input_nodes=256, activation='relu'),
-        Layer(input_nodes=256, activation='relu'),
-        Layer(input_nodes=256, activation='relu'),
-        Layer(input_nodes=256, activation='relu'),
-        Layer(input_nodes=10, activation='softmax'),
+        Layer(input_nodes=6, activation='relu'),
+        Layer(input_nodes=120, activation='leaky_relu'),
+        Layer(input_nodes=120, activation='leaky_relu'),
+        Layer(input_nodes=120, activation='leaky_relu'),
+        Layer(input_nodes=120, activation='leaky_relu'),
+        Layer(input_nodes=2, activation='softmax'),
     ])
 
-    net.compile(learning_rate=1e-4, optimizer='Adam', loss='categorical_cross_entropy')
+    net.compile(learning_rate=1e-3, optimizer='Adam', loss='categorical_cross_entropy')
 
     stats = net.fit(
         xs=x,
         ys=b,
         epochs=100
     )
+
+    print(net.accuracy(x, mnist.target))
 
     fig, (ax1, ax2) = plt.subplots(1, 2)
     epochs = [e + 1 for e in range(stats['epochs'])]

@@ -110,7 +110,15 @@ def _relu_gradient(op, grad):
     return grad * relu
 
 
+@RegisterGradient("LeakyRelu")
+def _relu_gradient(op, grad):
+    relu = np.copy(op.output)
+    relu[relu > 0] = op.alpha
+    relu[relu <= 0] = 0
+    return grad * relu
+
+
 @RegisterGradient("Tanh")
-def _sigmoid_gradient(op, grad):
+def _tanh_gradient(op, grad):
     tanh = op.output
     return grad * tanh * tanh

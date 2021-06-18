@@ -61,6 +61,7 @@ class Softmax(Operation):
             denominator = np.sum(numerator, axis=-1, keepdims=True)
             softmax = numerator / denominator
             return softmax
+
         return stable_softmax(a_value)
 
 
@@ -113,3 +114,14 @@ class Tanh(Operation):
 
     def compute(self, x):
         return np.tanh(x)
+
+
+class LeakyRelu(Operation):
+    def __init__(self, x, alpha):
+        super(LeakyRelu, self).__init__(name="LeakyRelu", input_nodes=[x])
+        self.alpha = alpha
+
+    def compute(self, x):
+        out = np.array(x)
+        leaky = np.where(out <= 0, out, out * self.alpha)
+        return leaky

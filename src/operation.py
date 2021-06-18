@@ -46,7 +46,8 @@ class Sigmoid(Operation):
         super(Sigmoid, self).__init__(name="Sigmoid", input_nodes=[value])
 
     def compute(self, a_value):
-        return 1 / (1 + np.exp(-a_value))
+        a = np.exp(-a_value)
+        return 1 / (1 + a)
 
 
 class Softmax(Operation):
@@ -54,7 +55,13 @@ class Softmax(Operation):
         super(Softmax, self).__init__(name="Softmax", input_nodes=[value])
 
     def compute(self, a_value):
-        return np.exp(a_value) / np.sum(np.exp(a_value), axis=1)[:, None]
+        def stable_softmax(x):
+            z = x - np.max(x, axis=-1, keepdims=True)
+            numerator = np.exp(z)
+            denominator = np.sum(numerator, axis=-1, keepdims=True)
+            softmax = numerator / denominator
+            return softmax
+        return stable_softmax(a_value)
 
 
 class Log(Operation):

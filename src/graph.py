@@ -1,3 +1,5 @@
+_default_graph = None
+
 
 class Graph:
     def __init__(self):

@@ -21,19 +21,21 @@ def traverse_postorder(operation: Operation):
 
 
 class Session:
-    def __init__(self, operation, feed_dict=None):
+    def __init__(self):
+        pass
+
+    def run(self, operation=None, feed_dict=None):
         if feed_dict is None:
             feed_dict = {}
 
-        self.feed_dict = feed_dict
-        self.operation = operation
-        self.nodes_postorder = traverse_postorder(operation)
+        feed_dict = feed_dict
+        operation = operation
+        nodes_postorder = traverse_postorder(operation)
 
-    def run(self):
-        for node in self.nodes_postorder:
+        for node in nodes_postorder:
             if type(node) == Placeholder:
                 # Set the node value to the placeholder value from feed_dict
-                node.output = self.feed_dict[node]
+                node.output = feed_dict[node]
             elif type(node) == Variable:
                 # Set the node value to the variable's value attribute
 
@@ -52,4 +54,4 @@ class Session:
             if type(node.output) == list:
                 node.output = np.array(node.output)
 
-        return self.operation.output
+        return operation.output

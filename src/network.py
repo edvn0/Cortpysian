@@ -1,9 +1,11 @@
+import time
 from collections import namedtuple
 
 import numpy as np
 from matplotlib import pyplot as plt
+from sklearn.model_selection import train_test_split
 
-from src.gradient_descent import SGD, Adam
+from src.gradient_descent import SGD, Adam, Momentum
 from src.graph import Graph
 from src.operation import MatMul, Add, Sigmoid, Negative, ReduceSum, Multiply, Log, Tanh, Relu, Softmax
 from src.placeholder import Placeholder
@@ -11,17 +13,22 @@ from src.session import Session
 from src.variable import Variable
 
 loss_registry = {
-    'categorical_cross_entropy': lambda x, p: Negative(ReduceSum(ReduceSum(Multiply(x, Log(p)), axis=1))),
-    'mean_squared_error': lambda x, p: ReduceSum(ReduceSum(Add(x, Negative(p)), axis=1))
+    'categorical_cross_entropy': lambda true, p: Negative(ReduceSum(ReduceSum(Multiply(true, Log(p)), axis=1))),
+    'mean_squared_error': lambda true, p: ReduceSum(ReduceSum(Add(true, Negative(p)), axis=1))
 }
 
 activation_registry = {
-    'sigmoid': lambda weight, activation_or_placeholder, bias: Sigmoid(
-        Add(MatMul(activation_or_placeholder, weight), bias)),
-    'tanh': lambda weight, activation_or_placeholder, bias: Tanh(Add(MatMul(activation_or_placeholder, weight), bias)),
-    'relu': lambda weight, activation_or_placeholder, bias: Relu(Add(MatMul(activation_or_placeholder, weight), bias)),
-    'softmax': lambda weight, activation_or_placeholder, bias: Softmax(
-        Add(MatMul(activation_or_placeholder, weight), bias))
+    'sigmoid': lambda w, a_p, b: Sigmoid(Add(MatMul(a_p, w), b)),
+    'tanh': lambda w, a_p, b: Tanh(Add(MatMul(a_p, w), b)),
+    'relu': lambda w, a_p, b: Relu(Add(MatMul(a_p, w), b)),
+    'softmax': lambda w, a_p, b: Softmax(Add(MatMul(a_p, w), b))
+}
+
+optimizer_registry = {
+    'Adam': lambda lr, loss, beta_one=0.9, beta_two=0.999: Adam(learning_rate=lr, beta_one=beta_one,
+                                                                beta_two=beta_two).fit(loss),
+    'SGD': lambda lr, loss: SGD(learning_rate=lr).fit(loss),
+    'Momentum': lambda lr, loss, momentum=0.5: Momentum(learning_rate=lr, momentum=momentum).fit(loss),
 }
 
 Layer = namedtuple('Layer', ['input_nodes', 'activation'])
@@ -35,6 +42,11 @@ def glorot_bias(input_nodes):
     return np.random.randn(input_nodes) * np.sqrt(6.0 / input_nodes)
 
 
+def zip_xs_ys(xs, ys, size: int):
+    indices = np.random.choice(xs.shape[0], size, replace=False)
+    return xs[indices, :], ys[indices, :]
+
+
 class Sequential:
     def __init__(self, layers: list[Layer] = None):
         if layers is None:
@@ -46,7 +58,7 @@ class Sequential:
 
         self.g: Graph = Graph()
 
-    def compile(self, optim='SGD', loss='categorical_cross_entropy', learning_rate=0.001):
+    def compile(self, optimizer='SGD', loss='categorical_cross_entropy', learning_rate=0.001):
 
         self.g = Graph()
         self.g.as_default()
@@ -81,50 +93,62 @@ class Sequential:
             b_layer = Variable(
                 name=f"b_{its}_{glorot_b.shape}", initial_value=glorot_b, layer=its)
 
-            if its != size - 1:
-                layer_sigmoid = Sigmoid(Add(MatMul(input_sigmoid, W_layer), b_layer))
-            else:
-                layer_sigmoid = Softmax(Add(MatMul(input_sigmoid, W_layer), b_layer))
+            layer_sigmoid = activation_registry[self.layers[its].activation](W_layer, input_sigmoid, b_layer)
 
             input_sigmoid = layer_sigmoid
             its += 1
 
-        self.J = Negative(ReduceSum(ReduceSum(Multiply(c, Log(input_sigmoid)), axis=1))) if \
-            loss == 'categorical_cross_entropy' else \
-            ReduceSum(ReduceSum(Multiply(Add(c, Negative(input_sigmoid)), Add(c, Negative(input_sigmoid))), axis=1))
+        self.Z = input_sigmoid
 
-        self.min = Adam(learning_rate=learning_rate).fit(
-            self.J) if optim == 'Adam' else SGD(learning_rate=learning_rate).fit(self.J)
+        self.J = loss_registry[loss](c, input_sigmoid)
 
-    def fit(self, xs, ys, epochs=100):
-        feed_dict = {
-            self.X: xs,
-            self.c: ys
-        }
+        self.min = optimizer_registry[optimizer](learning_rate, self.J)
 
+    def fit(self, xs, ys, epochs=10, batch_size=64):
         info_split = epochs // 10
 
-        s = Session(self.J, feed_dict=feed_dict)
-        s.run()
+        s = Session()
+        initial_loss = s.run(self.J, feed_dict={self.X: xs, self.c: ys})
 
-        s = Session(self.min, feed_dict=feed_dict)
-        losses = []
+        stats = {
+            'initial_loss': initial_loss,
+            'loss_epoch': [],
+            'time_epoch': [],
+            'correct_epoch': [],
+            'epochs': epochs,
+        }
+
+        batches = xs.shape[0] // batch_size
+
+        indices = np.arange(start=0, stop=xs.shape[0], step=batch_size, dtype=int)
+
         for i in range(epochs):
-            loss_session = Session(self.J, feed_dict=feed_dict)
-            l = loss_session.run()
-            if i % info_split == 0:
-                print(f"Epoch: {i}: Loss: {l}")
-            losses.append(l)
-            s.run()
+            t0 = time.time()
+            s.run(self.min, feed_dict={self.X: xs, self.c: ys})
+            t1 = time.time()
 
-        epochs = [i + 1 for i in range(len(losses))]
+            stats['time_epoch'].append(t1 - t0)
+            loss = s.run(self.J, feed_dict={self.X: xs, self.c: ys}) / xs.shape[0]
+            if i % info_split == 0 and i != 0:
+                print(f"Epoch: {i}: Loss: {loss}")
+            stats['loss_epoch'].append(loss)
 
-        fig, ax = plt.subplots()
-        ax.plot(epochs, losses)
+        return stats
 
-        ax.set(xlabel='epochs', ylabel='loss',
-               title='Loss over time')
-        ax.grid()
+    def classify(self, xs):
+        feed_dict = {
+            self.X: xs
+        }
 
-        fig.savefig("test.png")
-        plt.show()
+        s = Session()
+        out = s.run(operation=self.Z, feed_dict=feed_dict)
+        return np.argmax(out, axis=1)
+
+    def predict(self, xs):
+        feed_dict = {
+            self.X: xs
+        }
+
+        s = Session()
+        out = s.run(operation=self.Z, feed_dict=feed_dict)
+        return out

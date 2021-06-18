@@ -1,5 +1,8 @@
 import time
 from collections import namedtuple
+from typing import List
+
+from sklearn.model_selection import train_test_split
 
 import numpy as np
 
@@ -30,6 +33,12 @@ optimizer_registry = {
     'Momentum': lambda lr, loss, momentum=0.5: Momentum(learning_rate=lr, momentum=momentum).fit(loss),
 }
 
+metrics_registry = {
+    'mse': lambda x, y: np.mean(np.square(np.array(x-y))),
+    'mae': lambda x, y: np.mean(np.abs(np.array(x-y))),
+    'accuracy': lambda x, y: np.mean(np.argmax(x, axis=1) == np.argmax(y, axis=1))
+}
+
 Layer = namedtuple('Layer', ['input_nodes', 'activation'])
 
 
@@ -54,10 +63,12 @@ class Sequential:
         self.layers = layers
         self.J = None
         self.min = None
-
+        self.metrics = []
         self.g: Graph = Graph()
 
-    def compile(self, optimizer='SGD', loss='categorical_cross_entropy', learning_rate=0.001):
+    def compile(self, optimizer='SGD', loss='categorical_cross_entropy', learning_rate=0.001, metrics: List[str] = []):
+        for metric in metrics:
+            self.metrics.append(metrics_registry[metric])
 
         self.g = Graph()
         self.g.as_default()
@@ -118,21 +129,32 @@ class Sequential:
             'epochs': epochs,
         }
 
-        batches = xs.shape[0] // batch_size
+        trainX = xs[0:int(0.8*xs.shape[0])]
+        trainY = ys[0:int(0.8*xs.shape[0])]
+        testX = xs[int(0.8*xs.shape[0]):]
+        testY = ys[int(0.8*xs.shape[0]):]
+        batches = trainX.shape[0] // batch_size
 
-        indices = np.arange(
-            start=0, stop=xs.shape[0], step=batch_size, dtype=int)
+        x_t = np.array_split(trainX, batches)
+        y_t = np.array_split(trainY, batches)
 
         for i in range(epochs):
             t0 = time.time()
-            s.run(self.min, feed_dict={self.X: xs, self.c: ys})
+            for a, b in zip(x_t, y_t):
+                s.run(self.min, feed_dict={
+                      self.X: a, self.c: b})
             t1 = time.time()
 
             stats['time_epoch'].append(t1 - t0)
             loss = s.run(self.J, feed_dict={
-                         self.X: xs, self.c: ys}) / xs.shape[0]
+                self.X: testX, self.c: testY}) / testX.shape[0]
+
+            preds = s.run(self.Z, feed_dict={
+                self.X: testX})
             if i % info_split == 0 and i != 0:
-                print(f"Epoch: {i}: Loss: {loss}")
+                metrics = [metric(preds, testY) for metric in self.metrics]
+                print(f"Epoch: {i}: Loss: {loss}, metrics: {metrics}")
+
             stats['loss_epoch'].append(loss)
 
         return stats
@@ -153,7 +175,8 @@ class Sequential:
 
         s = Session()
         out = s.run(self.Z, feed_dict=feed_dict)
-        return np.array(np.argmax(out) == labels, dtype=int).sum()
+        preds = np.argmax(out, axis=1)
+        return np.mean(np.array(preds == labels, dtype=int))
 
     def predict(self, xs):
         feed_dict = {

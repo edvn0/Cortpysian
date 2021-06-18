@@ -8,6 +8,7 @@ if __name__ == "__main__":
     mnist = fetch_openml('mammography', as_frame=False)
 
     y = np.array(mnist.target, dtype=np.int8)
+    y[y < 0] = 0
     b = np.zeros((y.size, np.max(y, axis=0) + 1))
     b[np.arange(y.size), y] = 1
     x = mnist.data.reshape(-1, 6)
@@ -15,14 +16,12 @@ if __name__ == "__main__":
     # Create a new graph
     net = Sequential([
         Layer(input_nodes=6, activation='relu'),
-        Layer(input_nodes=120, activation='leaky_relu'),
-        Layer(input_nodes=120, activation='leaky_relu'),
-        Layer(input_nodes=120, activation='leaky_relu'),
-        Layer(input_nodes=120, activation='leaky_relu'),
+        Layer(input_nodes=300, activation='leaky_relu'),
         Layer(input_nodes=2, activation='softmax'),
     ])
 
-    net.compile(learning_rate=1e-3, optimizer='Adam', loss='categorical_cross_entropy')
+    net.compile(learning_rate=0.0001, optimizer='Adam',
+                loss='categorical_cross_entropy', metrics=['accuracy', 'mse', 'mae'])
 
     stats = net.fit(
         xs=x,
@@ -30,7 +29,8 @@ if __name__ == "__main__":
         epochs=100
     )
 
-    print(net.accuracy(x, mnist.target))
+    truths = np.argmax(b, axis=1)
+    print(net.accuracy(x, truths))
 
     fig, (ax1, ax2) = plt.subplots(1, 2)
     epochs = [e + 1 for e in range(stats['epochs'])]

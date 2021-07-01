@@ -1,6 +1,6 @@
 import time
 from collections import namedtuple
-from typing import List
+from typing import Iterable, List
 
 from sklearn.model_selection import train_test_split
 
@@ -56,12 +56,12 @@ def zip_xs_ys(xs, ys, size: int):
 
 
 class Sequential:
-    def __init__(self, layers: list[Layer] = None):
+    def __init__(self, layers: Iterable[Layer] = None):
         if layers is None:
             layers = []
 
-        self.layers = layers
-        self.J = None
+        self.layers = list(layers)
+        self.loss_function = None
         self.min = None
         self.metrics = []
         self.g: Graph = Graph()
@@ -86,7 +86,8 @@ class Sequential:
                                self.layers[0].input_nodes, self.layers[0].input_nodes), layer=0)
         b_input = Variable(name=f"b_0_{self.layers[0].input_nodes, 1}", initial_value=glorot_bias(
             self.layers[0].input_nodes), layer=0)
-        input_sigmoid = Sigmoid(Add(MatMul(X, W_input), b_input))
+        input_sigmoid = activation_registry[self.layers[0].activation](
+            W_input, self.X, b_input)
 
         its = 1
 
@@ -99,9 +100,12 @@ class Sequential:
             glorot_b = glorot_bias(self.layers[its].input_nodes)
 
             W_layer = Variable(name=f"W_{its}_{glorot_w.shape}",
-                               initial_value=glorot_w, layer=its)
-            b_layer = Variable(
-                name=f"b_{its}_{glorot_b.shape}", initial_value=glorot_b, layer=its)
+                               initial_value=glorot_w,
+                               layer=its)
+
+            b_layer = Variable(name=f"b_{its}_{glorot_b.shape}",
+                               initial_value=glorot_b,
+                               layer=its)
 
             layer_sigmoid = activation_registry[self.layers[its].activation](
                 W_layer, input_sigmoid, b_layer)
@@ -109,17 +113,19 @@ class Sequential:
             input_sigmoid = layer_sigmoid
             its += 1
 
-        self.Z = input_sigmoid
+        self.last_activation = input_sigmoid
 
-        self.J = loss_registry[loss](c, input_sigmoid)
+        self.loss_function = loss_registry[loss](c, input_sigmoid)
 
-        self.min = optimizer_registry[optimizer](learning_rate, self.J)
+        self.min = optimizer_registry[optimizer](
+            learning_rate, self.loss_function)
 
     def fit(self, xs, ys, epochs=10, batch_size=64):
         info_split = epochs // 10
 
         s = Session()
-        initial_loss = s.run(self.J, feed_dict={self.X: xs, self.c: ys})
+        initial_loss = s.run(self.loss_function, feed_dict={
+                             self.X: xs, self.c: ys})
 
         stats = {
             'initial_loss': initial_loss,
@@ -140,16 +146,14 @@ class Sequential:
 
         for i in range(epochs):
             t0 = time.time()
-            for a, b in zip(x_t, y_t):
-                s.run(self.min, feed_dict={
-                      self.X: a, self.c: b})
+            self.fit_on_batch(s, x_t, y_t)
             t1 = time.time()
 
             stats['time_epoch'].append(t1 - t0)
-            loss = s.run(self.J, feed_dict={
+            loss = s.run(self.loss_function, feed_dict={
                 self.X: testX, self.c: testY}) / testX.shape[0]
 
-            preds = s.run(self.Z, feed_dict={
+            preds = s.run(self.last_activation, feed_dict={
                 self.X: testX})
             if i % info_split == 0 and i != 0:
                 metrics = [metric(preds, testY) for metric in self.metrics]
@@ -159,13 +163,20 @@ class Sequential:
 
         return stats
 
+    def fit_on_batch(self, s: Session, x_t: List[np.ndarray], y_t: List[np.ndarray]):
+        for x, y in zip(x_t, y_t):
+            s.run(self.min, feed_dict={
+                self.X: x,
+                self.c: y
+            })
+
     def classify(self, xs):
         feed_dict = {
             self.X: xs
         }
 
         s = Session()
-        out = s.run(operation=self.Z, feed_dict=feed_dict)
+        out = s.run(operation=self.last_activation, feed_dict=feed_dict)
         return np.argmax(out, axis=1)
 
     def accuracy(self, Xs, labels):
@@ -174,7 +185,7 @@ class Sequential:
         }
 
         s = Session()
-        out = s.run(self.Z, feed_dict=feed_dict)
+        out = s.run(self.last_activation, feed_dict=feed_dict)
         preds = np.argmax(out, axis=1)
         return np.mean(np.array(preds == labels, dtype=int))
 
@@ -184,5 +195,13 @@ class Sequential:
         }
 
         s = Session()
-        out = s.run(operation=self.Z, feed_dict=feed_dict)
+        out = s.run(operation=self.last_activation, feed_dict=feed_dict)
         return out
+
+    def loss(self, xs, truths, s: Session = None):
+        session = Session()
+        if s is not None:
+            session = s
+        session = session
+
+        return session.run(self.loss_function, feed_dict={self.X: xs, self.c: truths})

@@ -6,11 +6,18 @@ import src.graph
 
 class Operation:
     def __init__(self, name: str = None, input_nodes=None):
+        """An operation is a computational node which takes inputs and produces outputs, via some function.
+        This function may be the identity function, addition, logging, whatever.
+
+        Args:
+            name (str, optional): Name of this operation. Defaults to None.
+            input_nodes (List[Union[Operation,Variable,Placeholder]], optional): How many input nodes are there? Defaults to None.
+        """
         if input_nodes is None:
             input_nodes = []
         self.input_nodes = input_nodes
         self.consumers: List[Operation] = []
-
+        self.output = None
         self.name = name
 
         for input_node in self.input_nodes:

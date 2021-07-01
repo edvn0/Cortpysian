@@ -16,11 +16,13 @@ if __name__ == "__main__":
     # Create a new graph
     net = Sequential([
         Layer(input_nodes=6, activation='relu'),
-        Layer(input_nodes=300, activation='leaky_relu'),
+        Layer(input_nodes=2, activation='tanh'),
+        Layer(input_nodes=2, activation='tanh'),
+        Layer(input_nodes=2, activation='tanh'),
         Layer(input_nodes=2, activation='softmax'),
     ])
 
-    net.compile(learning_rate=0.0001, optimizer='Adam',
+    net.compile(learning_rate=0.001, optimizer='Adam',
                 loss='categorical_cross_entropy', metrics=['accuracy', 'mse', 'mae'])
 
     stats = net.fit(

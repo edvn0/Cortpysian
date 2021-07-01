@@ -38,7 +38,6 @@ class Session:
                 node.output = feed_dict[node]
             elif type(node) == Variable:
                 # Set the node value to the variable's value attribute
-
                 node.output = node.value
             elif isinstance(node, Operation):  # Operation
                 # Get the input values for this operation from the output values of the input nodes
